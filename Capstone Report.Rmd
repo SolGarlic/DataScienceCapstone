@@ -1,0 +1,249 @@
+---
+title: "Capstone Report"
+author: "SolGarlic"
+date: "3 de Fevereiro de 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(tm)
+library(ggplot2)
+library(RWeka)
+library(tokenizers)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Getting the Data
+
+We created a small function to download the original data and unzip it.
+The en_US files will be stored at ".\final\en_US\":
+
+```{r load_function}
+dlFile <- function() {
+      temp <- tempfile()
+      download.file("https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip",temp)
+      unzip(temp)
+      unlink(temp)}
+```
+
+We took a look at the text files with the software Notepad++ (version 7.2.2, 32bits), and it seems each file has one blog / news / twit per page.
+The files seem to be encoded in UTF-8, but the twitter file is detected as ANSI.
+We also noticed that the files contain control codes that are not needed and might cause problems when processing the file. This is specially the case for the "SUB" control code that prevents the r readLines command from being correctly executed.
+We will remove most control codes with the regex replace  [^\x0A-\x0D\x1F-\x7F\xA0-\xFF]+ inside Notepad++.
+
+To better test the model to be implemented, we will create a smaller crude sample of these text files. Three functions were created:  
+- sampleDIR, just checks a folder and calls the sampFILE function for each file.  
+- sampFILE, randomly samples a certain number of lines of a text document and writes a smaller file in a TEST folder. Uses the funcion nlines:  
+- nlines, to calculate the number of lines in a file, needed to proper sample the lines.
+
+```{r samplefunctions}
+# sample: sample 5% of each input file and create new files
+sampleDIR <- function(dir="./final/en_US/", sample=0.05) {
+      # checks a folder and calls the sampFILE function for each file
+      filenames <- list.files(dir, pattern="*.txt", full.names=TRUE)
+      ldf <- lapply(filenames, function(x) sampFILE(x, sample) )
+}
+
+sampFILE <- function(x="./final/en_US/en_US.news.txt", samplesize=0.1) {
+      # samples 3000 (or half) of the lines of a text document and writes a
+      #     smaller file in the folder ./final/en_US_TEST/
+      # NOTE: news.txt had a "SUB" character that made the scan stop (the first at line 77259, just after "At the Spice Merchant, a 2-ounce bag of tea leaves capable of producing 1"
+      # It was manually removed with Notepad++
+      input <- file(x, "r") 
+      remaining <- nlines(x)
+      sel <- as.integer(remaining * samplesize)
+      # get the records numbers to select 
+      set.seed(12345)
+      recs <- sort(sample(1:remaining, sel)) 
+      # compute number to skip on each read; account for the record just read 
+      skip <- diff(c(0, recs)) - 1 
+      # allocate my data 
+      mysel <- sapply(1:sel, function(i) scan(input, what="character", 
+                                              skip=skip[i],nlines=1, 
+                                              sep="\n", quiet=TRUE))
+      close(input, "r")
+      filename <- gsub(".txt","_S.txt",x,fixed=TRUE)
+      filename <- gsub("en_US","en_US_TEST",filename,fixed=TRUE)
+      write(unlist(mysel),file=filename)
+      #      mysel
+}
+nlines <- function(x) {
+      # finds the number of lines of a file. Used by sampFILE
+      f <- file(x, open="rb")
+      n <- 0L
+      while (length(chunk <- readBin(f, "raw", 65536)) > 0) {
+            n <- n + sum(chunk == as.raw(10L))
+      }
+      close(f)
+      n
+}
+```
+
+## Cleaning the data
+To clean of data we still need to:  
+- transliterate the text as it still contains some foreign letters (e.g. fiancé),  
+- remove the profanity and a subset of the english "stop words"  
+- remove the numbers  
+- remove the punctuation (but we will leave the hyphen between words)  
+- convert all to lowercase  
+- remove excess whitespaces  
+- stem the words  
+
+### Transliterate and remove punctuation
+To remove the foreign letters and replace them with the standard letters, we will use the `iconv` function, but encapsulated in a `content_transformer`:
+```{r cleanfunction1}
+skipPunctuation <- function(x) removePunctuation(x,
+                  preserve_intra_word_dashes = TRUE)
+transliterate <- content_transformer(function(x) 
+                  iconv(x, from="latin1", to="ASCII//TRANSLIT"))
+```
+
+### Remove profanity and english stopwords
+Nowadays people tend to use alternative forms to write profanity words (like "4r5e").
+A comprehensive list of all possible forms of profanity words was found in the "full-list-of-bad-words-banned-by-google".
+We loaded this csv in a text vector and used it to apply another transformation to the corpora.
+A subset of the english common stop words, not very useful for our analysis, will also be removed.
+```{r cleanfunction2}
+profanity <- readLines("full-list-of-bad-words-banned-by-google-csv-file_2013_11_26_04_52_30_695.csv")
+skipWords <- function(x) removeWords(x, c(
+      stopwords("en"),
+      profanity))
+```
+
+### Finish cleaning
+We can now create a function to apply all these transformations to our corpora and get a clean new corpora:
+```{r cleancorpora, cache=TRUE}
+funs <- list(stripWhitespace,
+             skipPunctuation,
+             skipWords,
+             removeNumbers,
+             transliterate,
+             content_transformer(tolower)
+             )
+```
+
+## Sample Corpora
+In order to analyze and further process the text documents we will create a Corpora of documents, using package `tm`.
+When using the sample test txt documents we will use a volatile corpora, but we will use a permanent corpora when working with the original huge documents:
+
+```{r createCorpora, cache=TRUE}
+source <- DirSource(directory = "./final/en_US_TEST/",
+#                    pattern = "",
+                          encoding = "UTF-8")
+PC <- VCorpus(source,
+              readerControl = list(reader = readPlain,
+                                   language = "en", load = TRUE))
+PC <- tm_map(PC, FUN = tm_reduce, tmFuns = funs)
+```
+
+## Data Exploration
+In order to look at the data we will create a document term matrix:
+```{r createDTM, cache=TRUE}
+BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 1, max = 1))
+tdm <- TermDocumentMatrix(PC, control = list(tokenize = BigramTokenizer,
+                                                  wordLengths=c(1,Inf)))
+```
+
+We can also take a look at the frequency and count of total words
+```{r counts, cache=TRUE, echo=TRUE, include=FALSE}
+x <- inspect(tdm)
+freq <- rowSums(x)
+nwords <- colSums(x)
+rm(x)
+uniquewords <- length(freq)
+```
+
+So in these 3 samples with 10% of random lines from each document, we have `r uniquewords` different words, and an approximate total of `r as.integer(sum(nwords)*10)` words, divided by the 3 documents:
+```{r explore1}
+nwords*10
+```
+
+Words less frequent are very weird and should be ignored:
+```{r explore2, cache=TRUE}
+ord <- order(freq)   
+freq[head(ord)]  
+```
+
+Words very common are mostly 'stop words' with no actual meaning, and might obfuscate the probabilities of most important words:
+```{r explore3, cache=TRUE}
+freq[tail(ord)]   
+```
+
+Of the total of different words, `r head(table(freq), 20)[1]` only appear once:
+```{r explore4, cache=TRUE}
+head(table(freq), 20)   
+```
+As we have only 3 documents (blogs, news, twitter) there is no point in removing sparse terms, and it is preferable to remove these less frequent words.
+
+```{r plotexplore5, cache=TRUE}
+df <- data.frame(Words=names(freq[tail(ord,20)]),Frequencies=freq[tail(ord,20)])
+p <- ggplot(df, aes(x=Words, y=Frequencies))    
+p <- p + geom_bar(stat="identity")   
+p <- p + theme(axis.text.x=element_text(angle=45, hjust=1))   
+p   
+```
+
+
+## Word stemming
+There are also words with similar meanings, but with different endings. We could reduce the number of unique words if we stem the texts, provided we have a way to complete the stems of the predicted words.
+In order to do this, we will create a stem dictionary to recover the best estimate of the complete word to be predicted:
+
+```{r stemDictionary, cache=TRUE}
+#to create dictionary for stemCompletion
+freq1stem <- stemDocument(names(freq))
+freq <- freq[names(freq)!=freq1stem]
+freq <- sort(freq, decreasing = TRUE)
+StemDictionary <- names(freq)
+StemDictionary <- StemDictionary[freq>1]
+# StemDictionary is a word list ordered by frequency
+# use: tm::stemCompletion(x, StemDictionary, type="first") to complete words
+```
+
+
+#### Additional cleaning
+After our initial exploration, and in order to better predict the words with our model, there are two additional "cleanings" that should be performed:
+- stem the document, reducing the number of slightly different words that might cause noise in the prediction
+- remove some "stop words", that, by their frequency, would obfuscate the prediction of more important words.
+
+```{r additional cleaning}
+skipWords2 <- function(x) removeWords(x,
+                                      c(stopwords("en")
+                       ,"i","you","my","have","he","we","so","from","me","its"
+                       ,"all","said","his","your","just"
+                       ))
+funs <- c(stripWhitespace,
+          skipPunctuation,
+          stemDocument,  #only after creating a StemCompletion dictionary
+          skipWords2 
+#          funs # original cleaning function
+          )
+```
+
+Now that the StemDictionary is created, we can create the final Corpus.
+
+```{r finalCorpus}
+PCclean <- tm_map(PC, FUN = tm_reduce, tmFuns = funs)
+#PCclean <- tm_map(PCclean, FUN=skipWords)
+```
+
+```{r cleanup, echo=FALSE, include=FALSE}
+rm(freq, x, freq1stem, funs, nwords, profanity, source, tdm,
+   skipPunctuation, skipWords,skipWords2, transliterate, BigramTokenizer)
+```
+
+
+## Plans for the model (KATZ BACK OFF)
+
+- tokenize with n-grams (n=1 to 4),   
+- calculate the frequencies (counts, (C)) of each token (document term matrix, column sum)
+- we can replace all different tokens by an integer, greatly reducing the size of the database.  
+- calculate the table of frequencies (r, Nr)
+- remove the tokens with just one occurence (not meaningfull)
+- calculate "d" for all tokens
+      - part with Turing
+      - part with GoodTuring
+- calculate Beta
+- calculate Alfa
+- calculate the probabilities
+- define the "k" (at least 2 ????)
