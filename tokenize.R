@@ -74,7 +74,6 @@ c_ast <- function(N=N1, k=5, nWords=0,ngramtype=1) {
       c_ast
 }
 
-
 N1<- createNgram(PCclean, n=1L, min=1)
 N2<- createNgram(PCclean, n=2L, min=1)
 N3<- createNgram(PCclean, n=3L, min=1)
@@ -86,16 +85,17 @@ cGT<-data.frame(N1=c_ast(N=N1,k=5,nWords=sum(N1),ngramtype=1)
                 ,N4=c_ast(N=N4,k=5,nWords=sum(N1),ngramtype=4))
 
 calc_DiscoutF <- function(CC) {
-      # takes an ngram with at least 4 columns (ngramtxt, freq, nm1gram, type of ngram)
-      # returns the same table with an additional column with cGT
+      # takes a data frame with 2 columns (count (freq) and size of ngram (type))
+      # returns returns a column with cGT
+      # needs a cGT dataframe with the cGT for each freq and ngram size
       k<- dim(cGT)[1]-1
-      CC$cGT <- CC$freq
+      DiscountFreq <- CC$freq
       for (i in range(CC$freq)[1]:k) {
-            for (j in range(CC$freq)[1]:range(CC$freq)[2]) {
-                  CC$cGT[CC$type==j && CC$freq==i] <- cGT[i+1,j]
+            for (j in range(CC$type)[1]:range(CC$type)[2]) {
+                  DiscountFreq[CC$type==j & CC$freq==i] <- cGT[i+1,j]
             }
       }
-      CC
+      DiscountFreq
 }      
 calc_leftOver <- function(CC) {
       # takes an ngram with at least 5 columns (ngramtxt, freq, nm1gram, type of ngram, cGT)
@@ -109,42 +109,46 @@ calc_leftOver <- function(CC) {
 
 load("ngram_n4_1.Rdata")
 temp2$type=4
-temp2<-calc_DiscoutF(temp2)
+temp2$cGT<-calc_DiscoutF(temp2[,c("freq","type")])
 leftoverN3<-calc_leftOver(temp2)
+temp2<-temp2[temp2$freq>1,]
 C4<- temp2
 save(C4, file="ngram_n4_1.Rdata")
 save(leftoverN3, file="leftoverN3.Rdata")
-rm(C4, temp2, leftoverN3)
+rm(C4, temp2)
 
 load("ngram_n3_1.Rdata")
 temp2$type=3
-temp2<-calc_DiscoutF(temp2)
+temp2$cGT<-calc_DiscoutF(temp2[,c("freq","type")])
 leftoverN2<-calc_leftOver(temp2)
-C3<- temp2
+temp2<-temp2[temp2$freq>1,]
+C3<-merge(temp2, leftoverN3, by.x="ngramtxt", by.y = "ngram")
 save(C3, file="ngram_n3_1.Rdata")
 save(leftoverN2, file="leftoverN2.Rdata")
-rm(C3, temp2, leftoverN2)
+rm(C3, temp2, leftoverN3)
 
 load("ngram_n2_1.Rdata")
 temp2$type=2
-temp2<-calc_DiscoutF(temp2)
+temp2$cGT<-calc_DiscoutF(temp2[,c("freq","type")])
 leftoverN1<-calc_leftOver(temp2)
-C2<- temp2
+temp2<-temp2[temp2$freq>1,]
+C2<-merge(temp2, leftoverN2, by.x="ngramtxt", by.y = "ngram")
 save(C2, file="ngram_n2_1.Rdata")
 save(leftoverN1, file="leftoverN1.Rdata")
-rm(C2, temp2, leftoverN1)
+rm(C2, temp2, leftoverN2)
 
 load("ngram_n1_1.Rdata")
 temp2$nm1gram=""
 temp2$type=1
-temp2<-calc_DiscoutF(temp2)
-C1<- temp2
+temp2$cGT<-calc_DiscoutF(temp2[,c("freq","type")])
+C2<-merge(temp2, leftoverN1, by.x="ngramtxt", by.y = "ngram")
 save(C1, file="ngram_n1_1.Rdata")
-rm(C1, temp2)
+rm(C1, temp2, leftoverN1)
 
 
 
-CC<-rbind(C1, C2, C3, C4)
+
+
 
 
 
