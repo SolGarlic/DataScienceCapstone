@@ -27,7 +27,7 @@ createNgram <- function(corpus, n=2L, min=1L) {
                                   method = "string",tolower = TRUE, marker = "_",
                                   recursive = FALSE, persistent = FALSE, useBytes = FALSE,
                                   perl = TRUE, verbose = FALSE, decreasing = FALSE)
-                  temp <- temp[!grepl("\\beos\\b", names(temp))]
+                  temp <- temp[!grepl("\\beos\\b", names(temp))] #removes all ngrams that contain "eos" marker
                   temp <- data.frame(ngramtxt=names(temp), freq=as.integer(temp))
                   file <- paste("ngram_n",n,"_",j,"_",i,".RData",sep="") 
                   save(temp, file = file)
@@ -50,6 +50,7 @@ createNgram <- function(corpus, n=2L, min=1L) {
             file <- paste("ngram_n",n,"_",j,".Rdata",sep="") 
             print(paste("done doc",j,Sys.time()))
             if(n>1) temp2$nm1gram <- gsub(" ([^ ])*$","",temp2$ngramtxt)
+            
             N <- table(temp2[,2])
             temp2 <- temp2[temp2$freq >=min,]
             save(temp2, file = file)
@@ -73,33 +74,81 @@ c_ast <- function(N=N1, k=5, nWords=0,ngramtype=1) {
       c_ast
 }
 
-N1<- createNgram(PCclean, n=1L, min=2)
-N2<- createNgram(PCclean, n=2L, min=2)
-N3<- createNgram(PCclean, n=3L, min=2)
-N4<- createNgram(PCclean, n=4L, min=2)
+
+N1<- createNgram(PCclean, n=1L, min=1)
+N2<- createNgram(PCclean, n=2L, min=1)
+N3<- createNgram(PCclean, n=3L, min=1)
+N4<- createNgram(PCclean, n=4L, min=1)
+
+cGT<-data.frame(N1=c_ast(N=N1,k=5,nWords=sum(N1),ngramtype=1)
+                ,N2=c_ast(N=N2,k=5,nWords=sum(N1),ngramtype=2)
+                ,N3=c_ast(N=N3,k=5,nWords=sum(N1),ngramtype=3)
+                ,N4=c_ast(N=N4,k=5,nWords=sum(N1),ngramtype=4))
+
+calc_DiscoutF <- function(CC) {
+      # takes an ngram with at least 4 columns (ngramtxt, freq, nm1gram, type of ngram)
+      # returns the same table with an additional column with cGT
+      k<- dim(cGT)[1]-1
+      CC$cGT <- CC$freq
+      for (i in range(CC$freq)[1]:k) {
+            for (j in range(CC$freq)[1]:range(CC$freq)[2]) {
+                  CC$cGT[CC$type==j && CC$freq==i] <- cGT[i+1,j]
+            }
+      }
+      CC
+}      
+calc_leftOver <- function(CC) {
+      # takes an ngram with at least 5 columns (ngramtxt, freq, nm1gram, type of ngram, cGT)
+      # returns the table with the leftover probability for each nm1gram
+      num<-aggregate(CC$cGT,list(CC$nm1gram),FUN="sum")
+      den<-aggregate(CC$freq,list(CC$nm1gram),FUN="sum")
+      prob<-(1-num$x/den$x)
+      leftoverprob<-data.frame(ngram=num[,1], leftover=prob)
+      leftoverprob
+}
 
 load("ngram_n4_1.Rdata")
-C4 <- temp2
+temp2$type=4
+temp2<-calc_DiscoutF(temp2)
+leftoverN3<-calc_leftOver(temp2)
+C4<- temp2
+save(C4, file="ngram_n4_1.Rdata")
+save(leftoverN3, file="leftoverN3.Rdata")
+rm(C4, temp2, leftoverN3)
+
 load("ngram_n3_1.Rdata")
-C3 <- temp2
+temp2$type=3
+temp2<-calc_DiscoutF(temp2)
+leftoverN2<-calc_leftOver(temp2)
+C3<- temp2
+save(C3, file="ngram_n3_1.Rdata")
+save(leftoverN2, file="leftoverN2.Rdata")
+rm(C3, temp2, leftoverN2)
+
 load("ngram_n2_1.Rdata")
-C2 <- temp2
+temp2$type=2
+temp2<-calc_DiscoutF(temp2)
+leftoverN1<-calc_leftOver(temp2)
+C2<- temp2
+save(C2, file="ngram_n2_1.Rdata")
+save(leftoverN1, file="leftoverN1.Rdata")
+rm(C2, temp2, leftoverN1)
+
 load("ngram_n1_1.Rdata")
-C1 <- temp2
-C1$nm1gram=""
-C1$type=1
-C2$type=2
-C3$type=3
-C4$type=4
+temp2$nm1gram=""
+temp2$type=1
+temp2<-calc_DiscoutF(temp2)
+C1<- temp2
+save(C1, file="ngram_n1_1.Rdata")
+rm(C1, temp2)
+
+
+
 CC<-rbind(C1, C2, C3, C4)
 
 
-cGT<-data.frame(N1=c_ast(N=N1,k=5,nWords=sum(N1),ngramtype=1)
-               ,N2=c_ast(N=N2,k=5,nWords=sum(N1),ngramtype=2)
-               ,N3=c_ast(N=N3,k=5,nWords=sum(N1),ngramtype=3)
-               ,N4=c_ast(N=N4,k=5,nWords=sum(N1),ngramtype=4)
-               )
-GT_count <- function(count, nType=c(1:4)) {
+
+GT_count <- function(count, nType=c(1:4)) {  #obsolete, not needed
       # this function returns the adjusted count based on the count and the ngram type
       # if count>k, returns the count
       # needs cGT data.frame as created above and shown below:
@@ -108,7 +157,7 @@ GT_count <- function(count, nType=c(1:4)) {
 #      1 0.3772528 0.1859409570 6.341883e-02 1.266002e-02
 #
       if(count>=dim(cGT)[1]) return(count)
-      else return(cGT[count+1,nType])
+      return(cGT[count+1,nType])
 }
       
 
@@ -134,33 +183,7 @@ CalcProb <- function(txt) {
       Cnum<- GT_count(Cnum,4)
       Prob=Cnum/Cden
       
-      
-      
-      
-      
 }
-
-LeftOver <- function(txt) {
-      nwords = 1+lengths(regmatches(txt, gregexpr(" ", txt)))
-      if(nwords==3) # 1-sum(d(wwi)*c(wwi)/c(wwi-1) = 1-sum(GT_count(c(wwi)))/c(wwi-1) 
-            {leftOverProb <- 1- sum(
-                  sapply(C4[C4$nm1gram==txt,]$freq,function(x) GT_count(x,3))/
-                        C3[C3$ngramtxt==txt,]$freq
-            )}
-      if(nwords==2) # 1-sum(d(wwi)*c(wwi)/c(wwi-1) = 1-sum(GT_count(c(wwi)))/c(wwi-1)
-            {leftOverProb <- 1- sum(
-                  sapply(C3[C3$nm1gram==txt,]$freq,function(x) GT_count(x,2))/
-                        C2[C2$ngramtxt==txt,]$freq
-            )}
-      if(nwords==1) # 1-sum(d(wwi)*c(wwi)/c(wwi-1) = 1-sum(GT_count(c(wwi)))/c(wwi-1)
-            {leftOverProb <- 1- sum(
-                  sapply(C2[C2$nm1gram==txt,]$freq,function(x) GT_count(x,1))/
-                        C1[C1$ngramtxt==txt,]$freq
-            )}
-      leftOverProb
-}
-LeftOverN3 <- sapply(C3$ngramtxt[1:2], LeftOver)
-
 
 createNgramIntIndex <- function(corpus=PC, n=2L) {
       #      corpus <- PC   (for testing)
