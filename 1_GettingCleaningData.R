@@ -139,12 +139,12 @@ gsubCorpus <- function (corpus, pattern, replacement, fixed=FALSE) {
 cleanCorpus <- function(PCclean) {
       library(tm)
       # replace most punctuation by " "
-      PCclean <- gsubCorpus(PCclean, "[][|~<>_¢^\\}\\\\{()ºª£€§@<=>#$%*+/&·`´¨-]+", " ")
+      PCclean <- gsubCorpus(PCclean, "[][|~<>_,¢^\\}\\\\{()ºª£€§@<=>#$%*+/&·`´¨-]+", " ")
       # remove numbers (to also remove additionl ".,")
       PCclean <- gsubCorpus(PCclean, "\\d*(,|.)?\\d+", "")
-      # replace strong punctuation by " eos ", including all 
+      # replace strong punctuation by " eosent ", including all 
       # punctuation that cause uncorrelation between words
-      PCclean <- gsubCorpus(PCclean, "[!,.:;?]+", " eos ")
+      PCclean <- gsubCorpus(PCclean, "[!.:;?]+", " eosent ")
             # confirm if "," should be a sentence separator
       # transliterate
       transliterate <- content_transformer(function(x)
@@ -175,26 +175,26 @@ cleanCorpus <- function(PCclean) {
 
 
 
-chr_tokenizer <- function(x) unlist(strsplit(as.character(x), split=""))
-library("RWeka")
-BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
-ctrl <- list(tokenize = NGramTokenizer,
-             wordLengths = c(1, Inf))
-ctrl <- list(tokenize = chr_tokenizer,
-             wordLengths = c(1, Inf))
-freq1<-termFreq(PCclean[[1]], ctrl)
-freq1 <- freq1[!grepl(" ?\\beof\\b ?", names(freq1))]
-head(freq1,20)
-cha<-sort(names(freq1))
-head(cha,20)
+# chr_tokenizer <- function(x) unlist(strsplit(as.character(x), split=""))
+# library("RWeka")
+# BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+# ctrl <- list(tokenize = NGramTokenizer,
+#              wordLengths = c(1, Inf))
+# ctrl <- list(tokenize = chr_tokenizer,
+#              wordLengths = c(1, Inf))
+# freq1<-termFreq(PCclean[[1]], ctrl)
+# freq1 <- freq1[!grepl(" ?\\beof\\b ?", names(freq1))]
+# head(freq1,20)
+# cha<-sort(names(freq1))
+# head(cha,20)
 
 
-x<-"André 1@£€] ¨ Abigail Reynolds   !#!$!#$#$%%&#<>$%^/}][6€§£ººº 33.44 3,1 João,.-()\\/(!(#$/)!(#*ªÇ)!(),.:;?|"
-x4<-gsub("[!(),.:;?]+", "<EOF>",x2)
-x2<-gsub(pattern="[][\\}{()ºª£€§@<=>#$%*+-/&']+", replacement=" ",x)
-gsub(pattern="[][|<>^\\}{()ºª£€§@<=>#$%*+/&'-]+", replacement=" ",x)
-x2<-gsub("\\d*(,|.)?\\d+", "",x3)
-gsub("[[:punct:-[<>]]]", "",x2)
-gsub("( <EOF> *)+", " <EOF> ",x3)
+# x<-"André 1@£€] ¨ Abigail Reynolds   !#!$!#$#$%%&#<>$%^/}][6€§£ººº 33.44 3,1 João,.-()\\/(!(#$/)!(#*ªÇ)!(),.:;?|"
+# x4<-gsub("[!(),.:;?]+", "<EOF>",x2)
+# x2<-gsub(pattern="[][\\}{()ºª£€§@<=>#$%*+-/&']+", replacement=" ",x)
+# gsub(pattern="[][|<>^\\}{()ºª£€§@<=>#$%*+/&'-]+", replacement=" ",x)
+# x2<-gsub("\\d*(,|.)?\\d+", "",x3)
+# gsub("[[:punct:-[<>]]]", "",x2)
+# gsub("( <EOF> *)+", " <EOF> ",x3)
 
 

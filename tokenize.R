@@ -27,7 +27,7 @@ createNgram <- function(corpus, n=2L, min=1L) {
                                   method = "string",tolower = TRUE, marker = "_",
                                   recursive = FALSE, persistent = FALSE, useBytes = FALSE,
                                   perl = TRUE, verbose = FALSE, decreasing = FALSE)
-                  temp <- temp[!grepl("\\beos\\b", names(temp))] #removes all ngrams that contain "eos" marker
+                  temp <- temp[!grepl("\\beosent\\b", names(temp))] #removes all ngrams that contain "eos" marker
                   temp <- data.frame(ngramtxt=names(temp), freq=as.integer(temp))
                   file <- paste("ngram_n",n,"_",j,"_",i,".RData",sep="") 
                   save(temp, file = file)
@@ -100,52 +100,46 @@ calc_DiscoutF <- function(CC) {
 calc_leftOver <- function(CC) {
       # takes an ngram with at least 5 columns (ngramtxt, freq, nm1gram, type of ngram, cGT)
       # returns the table with the leftover probability for each nm1gram
-      num<-aggregate(CC$cGT,list(CC$nm1gram),FUN="sum")
-      den<-aggregate(CC$freq,list(CC$nm1gram),FUN="sum")
-      prob<-(1-num$x/den$x)
-      leftoverprob<-data.frame(ngram=num[,1], leftover=prob)
+      temp<-aggregate(CC[,c("freq","cGT")],list(CC$nm1gram),FUN="sum")
+      temp$leftover<-(1-temp[,3]/temp[,2])
+      leftoverprob<-temp[,c(1,4)]
+      names(leftoverprob)<-c("ngramtxt", "leftover")
       leftoverprob
 }
 
 load("ngram_n4_1.Rdata")
-temp2$type=4
-temp2$cGT<-calc_DiscoutF(temp2[,c("freq","type")])
-leftoverN3<-calc_leftOver(temp2)
-temp2<-temp2[temp2$freq>1,]
 C4<- temp2
-save(C4, file="ngram_n4_1.Rdata")
-save(leftoverN3, file="leftoverN3.Rdata")
-rm(C4, temp2)
+C4$type=4
+C4$cGT<-calc_DiscoutF(C4[,c("freq","type")])
+leftoverN3<-calc_leftOver(C4)
+C4<-C4[C4$freq>1,]
+C4$leftover<-NA
 
 load("ngram_n3_1.Rdata")
-temp2$type=3
-temp2$cGT<-calc_DiscoutF(temp2[,c("freq","type")])
-leftoverN2<-calc_leftOver(temp2)
-temp2<-temp2[temp2$freq>1,]
-C3<-merge(temp2, leftoverN3, by.x="ngramtxt", by.y = "ngram")
-save(C3, file="ngram_n3_1.Rdata")
-save(leftoverN2, file="leftoverN2.Rdata")
-rm(C3, temp2, leftoverN3)
+C3<-temp2
+C3$type=3
+C3$cGT<-calc_DiscoutF(C3[,c("freq","type")])
+leftoverN2<-calc_leftOver(C3)
+C3<-C3[C3$freq>1,]
+C3<-merge(C3, leftoverN3, by="ngramtxt")
 
 load("ngram_n2_1.Rdata")
-temp2$type=2
-temp2$cGT<-calc_DiscoutF(temp2[,c("freq","type")])
-leftoverN1<-calc_leftOver(temp2)
-temp2<-temp2[temp2$freq>1,]
-C2<-merge(temp2, leftoverN2, by.x="ngramtxt", by.y = "ngram")
-save(C2, file="ngram_n2_1.Rdata")
-save(leftoverN1, file="leftoverN1.Rdata")
-rm(C2, temp2, leftoverN2)
+C2<-temp2
+C2$type=2
+C2$cGT<-calc_DiscoutF(C2[,c("freq","type")])
+leftoverN1<-calc_leftOver(C2)
+C2<-C2[C2$freq>1,]
+C2<-merge(C2, leftoverN2, by="ngramtxt")
 
 load("ngram_n1_1.Rdata")
-temp2$nm1gram=""
-temp2$type=1
-temp2$cGT<-calc_DiscoutF(temp2[,c("freq","type")])
-C2<-merge(temp2, leftoverN1, by.x="ngramtxt", by.y = "ngram")
-save(C1, file="ngram_n1_1.Rdata")
-rm(C1, temp2, leftoverN1)
+C1<-temp2
+C1$nm1gram=""
+C1$type=1
+C1$cGT<-calc_DiscoutF(C1[,c("freq","type")])
+C1<-merge(C1, leftoverN1, by="ngramtxt")
 
-
+CC<-rbind(C1, C2, C3, C4)
+rm(C1, C2, C3, C4, leftoverN1, leftoverN2, leftoverN3, temp)
 
 
 
@@ -170,23 +164,136 @@ CalcProb <- function(txt) {
       library(tm)
       # clean the text with the same procedure as the training corpus
       # and return the vector with the ngram
-      source <- VectorSource(txt)
-      PC2 <- VCorpus(source,
-                     readerControl = list(reader = readPlain,
-                                          language = "en", load = TRUE))
-      PC2 <- cleanCorpus(PC2)
-      ntxt<- unlist(strsplit(PC2[[1]][[1]][1])," ")
+#      source <- VectorSource(txt)
+#      PC2 <- VCorpus(source,
+#                     readerControl = list(reader = readPlain,
+#                                          language = "en", load = TRUE))
+#      PC2 <- cleanCorpus(PC2)
+#      ntxt<- unlist(strsplit(PC2[[1]][[1]][1]," "))
+      ntxt<- unlist(strsplit(txt," "))
       n<- length(ntxt)
-      ntxt<- ntxt[ntxt-3:ntxt]
+      ntxt<- ntxt[(n-3):n]
 
-      #calc prob 4
-      n4gram <- paste(ntxt[1:4], collapse=" ")
-      nm1gram <- paste(ntxt[1:3], collapse=" ")
-      Cnum<- CC$freq[match(n4gram,CC$ngramtxt)]
-      Cden<- CC$freq[match(n4gram,CC$ngramtxt)]
-      Cnum<- GT_count(Cnum,4)
-      Prob=Cnum/Cden
+      ngramw <- sapply(1:4, function(x) paste(ntxt[x:4], collapse=" "))
+      ngramm1  <- sapply(1:3, function(x) paste(ntxt[x:3], collapse=" "))
+      ngram<- c(ngramw, ngramm1)
+      pos<-match(ngram, CC$ngramtxt)
       
+      # first we check if the w-3,w-1 ngram is found
+      if(!is.na(pos[5])) {          # w-3,w-1 ngram found, we can continue
+            #calc prob 4
+            if(!is.na(pos[1])) {          # exists w-3,w ngram
+                  Cnum<- CC$cGT[pos[1]]   # discounted freq of w-3,w ngram
+                  Cden<- CC$freq[pos[5]]  # freq of w-3,w-1 ngram
+                  return(Prob=Cnum/Cden)}
+            
+            #calc prob 3
+            if(!is.na(pos[2])) {          # exists w-2,w ngram
+                  Cnum<- CC$cGT[pos[2]]   # discounted freq of w-2,w ngram
+                  Cden<- CC$freq[pos[6]]  # freq of w-2,w-1 ngram
+                  beta <- CC$leftover[pos[2]]  #leftover of w-2,w ngram
+                  #calculate alpha
+                  group2gram <- CC[CC$nm1gram==ngram[6],] # ngrams which contain the first terms
+                  group3gram <- CC[CC$nm1gram==ngram[5],] # ngrams which contain the first terms
+                  # ngrams with contain the last terms and didn't exist in the above order
+                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt),]
+                  alpha <-beta/sum((group$cGT)/Cden)
+                  return(Prob=alpha*Cnum/Cden)}
+            
+            #calc prob 2
+            if(!is.na(pos[3])) {          # exists w-1,w ngram
+                  Cnum<- CC$cGT[pos[3]]   # discounted freq of w-1,w ngram
+                  Cden<- CC$freq[pos[7]]  # freq of w-1,w-1 ngram
+                  beta <- CC$leftover[pos[3]]  #leftover of w-1,w ngram
+                  #calculate alpha
+                  group2gram <- CC[CC$nm1gram==ngram[7],] # ngrams which contain the first terms
+                  group3gram <- CC[CC$nm1gram==ngram[5],] # ngrams which contain the first terms
+                  # ngrams with contain the last terms and didn't exist in the above order
+                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt),]
+                  alpha <-beta/sum((group$cGT)/Cden)
+                  return(Prob=alpha*Cnum/Cden)}
+      
+            #calc prob 1
+            if(!is.na(pos[4])) {          # exists w ngram
+                  Cnum<- CC$cGT[pos[4]]   # discounted freq of w ngram
+                  Cden<- sum(CC$freq[CC$type==1])  # sum of all 1grams
+                  beta <- CC$leftover[pos[4]]  #leftover of w ngram
+                  #calculate alpha
+                  group2gram <- CC[CC$type==1,] # ngrams which contain the first terms
+                  group3gram <- CC[CC$nm1gram==ngram[5],] # ngrams which contain the first terms
+                  # ngrams with contain the last terms and didn't exist in the above order
+                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt),]
+                  alpha <-beta/sum((group$cGT)/Cden)
+                  return(Prob=alpha*Cnum/Cden)}
+      }
+      if(!is.na(pos[6])) {          # w-2,w-1 ngram found, we can continue
+            #calc prob 4
+            if(!is.na(pos[2])) {          # exists w-3,w ngram
+                  Cnum<- CC$cGT[pos[2]]   # discounted freq of w-3,w ngram
+                  Cden<- CC$freq[pos[6]]  # freq of w-3,w-1 ngram
+                  return(Prob=Cnum/Cden)}
+            
+            #calc prob 3
+            if(!is.na(pos[3])) {          # exists w-2,w ngram
+                  Cnum<- CC$cGT[pos[3]]   # discounted freq of w-2,w ngram
+                  Cden<- CC$freq[pos[7]]  # freq of w-2,w-1 ngram
+                  beta <- CC$leftover[pos[3]]  #leftover of w-2,w ngram
+                  #calculate alpha
+                  group2gram <- CC[CC$nm1gram==ngram[7],] # ngrams which contain the first terms
+                  group3gram <- CC[CC$nm1gram==ngram[6],] # ngrams which contain the first terms
+                  # ngrams with contain the last terms and didn't exist in the above order
+                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt),]
+                  alpha <-beta/sum((group$cGT)/Cden)
+                  return(Prob=alpha*Cnum/Cden)}
+            
+            #calc prob 1
+            if(!is.na(pos[4])) {          # exists w ngram
+                  Cnum<- CC$cGT[pos[4]]   # discounted freq of w ngram
+                  Cden<- sum(CC$freq[CC$type==1])  # sum of all 1grams
+                  beta <- CC$leftover[pos[4]]  #leftover of w ngram
+                  #calculate alpha
+                  group2gram <- CC[CC$type==1,] # ngrams which contain the first terms
+                  group3gram <- CC[CC$nm1gram==ngram[6],] # ngrams which contain the first terms
+                  # ngrams with contain the last terms and didn't exist in the above order
+                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt),]
+                  alpha <-beta/sum((group$cGT)/Cden)
+                  return(Prob=alpha*Cnum/Cden)}
+      }
+      
+      if(!is.na(pos[7])) {          # w-1,w-1 ngram found, we can continue
+            #calc prob 4
+            if(!is.na(pos[3])) {          # exists w-3,w ngram
+                  Cnum<- CC$cGT[pos[3]]   # discounted freq of w-3,w ngram
+                  Cden<- CC$freq[pos[7]]  # freq of w-3,w-1 ngram
+                  return(Prob=Cnum/Cden)}
+            
+            #calc prob 1
+            if(!is.na(pos[4])) {          # exists w ngram
+                  Cnum<- CC$cGT[pos[4]]   # discounted freq of w ngram
+                  Cden<- sum(CC$freq[CC$type==1])  # sum of all 1grams
+                  beta <- CC$leftover[pos[4]]  #leftover of w ngram
+                  #calculate alpha
+                  group2gram <- CC[CC$type==1,] # ngrams which contain the first terms
+                  group3gram <- CC[CC$nm1gram==ngram[7],] # ngrams which contain the first terms
+                  # ngrams with contain the last terms and didn't exist in the above order
+                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt),]
+                  alpha <-beta/sum((group$cGT)/Cden)
+                  return(Prob=alpha*Cnum/Cden)}
+      }
+      if(is.na(pos[7])) {          # w-1,w-1 ngram found, we can continue
+            #calc prob 4
+            if(!is.na(pos[4])) {          # exists w-3,w ngram
+                  Cnum<- CC$cGT[pos[4]]   # discounted freq of w-3,w ngram
+                  Cden<- sum(CC$freq[CC$type==1])  # freq of w-3,w-1 ngram
+                  return(Prob=Cnum/Cden)}
+      }
+      return(0)
 }
 
 createNgramIntIndex <- function(corpus=PC, n=2L) {
