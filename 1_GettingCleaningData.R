@@ -90,37 +90,34 @@ createPC <- function(Virtual=TRUE) {
       return(PC)
 }
            
-#Clean final PC               
-      
-cleanAlt <- function() {      #Obsolete
-      skipPunctuation <- function(x) removePunctuation(x,
-                                                       preserve_intra_word_dashes = TRUE)
+StemCompleteDic <- function() {
+      # Creates a sorted text vector with the unstemmd version of the stemmed words
+      # StemDictionary is a word list ordered by frequency
+      # use: tm::stemCompletion(x, StemDictionary, type="first") to complete words
+      skipPunctuation <- function(x) removePunctuation(x)
       transliterate <- content_transformer(function(x) {
             iconv(x, from="latin1", to="ASCII//TRANSLIT")
-            iconv(x, "UTF-8", "ASCII",sub='')
       })
       profanity <- readLines("full-list-of-bad-words-banned-by-google-csv-file_2013_11_26_04_52_30_695.csv")
       skipWords <- function(x) removeWords(x, c(
             stopwords("en"),
             profanity))
-      skipWords2 <- function(x) removeWords(x,
-                                            c(profanity
-                                              ,stopwords("en")
-                                              ,"i","you","my","have","he","we","so","from","me","its"
-                                              ,"all","said","his","your","just"
-                                            ))
-      funs <- list(stripWhitespace,
-                   stemDocument,  #only after creating a StemCompletion dictionary
-                   skipPunctuation,
-#                   skipWords,
-                   skipWords2,
-                   removeNumbers,
+      funs <- list(removeNumbers,
+                   skipWords,
                    transliterate,
+                   skipPunctuation,
+                   stripWhitespace,
                    content_transformer(tolower)
       )
-      
-      
-      PCclean <- tm_map(PC, FUN = tm_reduce, tmFuns = funs)
+      PCclean2 <- tm_map(PC, FUN = tm_reduce, tmFuns = funs)
+      freq<-termFreq(PCclean2[[1]])
+      freq1stem <- stemDocument(names(freq))
+      freq1stem <- freq[names(freq)!=freq1stem]
+      freq <- sort(freq1stem, decreasing = TRUE)
+      StemDictionary <- names(freq)
+      # StemDictionary <- StemDictionary[freq>1] # optional if too big
+      save (StemDictionary, file="StemDictionary.Rdata")
+      return(StemDictionary)
 }
       
 ############################
@@ -155,7 +152,7 @@ cleanCorpus <- function(PCclean) {
                        ,"all","said","his","your","just")
       skipWords <- function(x) removeWords(x, c(
             stopwords("en"),
-            mystopwords,
+#            mystopwords,
             profanity))
       skipPunctuation <- function(x) removePunctuation(x)
       # remove additional punctuation and foreign characters

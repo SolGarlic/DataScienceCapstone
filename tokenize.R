@@ -83,6 +83,8 @@ cGT<-data.frame(N1=c_ast(N=N1,k=5,nWords=sum(N1),ngramtype=1)
                 ,N2=c_ast(N=N2,k=5,nWords=sum(N1),ngramtype=2)
                 ,N3=c_ast(N=N3,k=5,nWords=sum(N1),ngramtype=3)
                 ,N4=c_ast(N=N4,k=5,nWords=sum(N1),ngramtype=4))
+save(N1, N2, N3, N4, file="All_FreqOfFreq_N_tables.Rdata")
+rm(N1, N2, N3, N4)
 
 calc_DiscoutF <- function(CC) {
       # takes a data frame with 2 columns (count (freq) and size of ngram (type))
@@ -139,7 +141,7 @@ C1$cGT<-calc_DiscoutF(C1[,c("freq","type")])
 C1<-merge(C1, leftoverN1, by="ngramtxt")
 
 CC<-rbind(C1, C2, C3, C4)
-rm(C1, C2, C3, C4, leftoverN1, leftoverN2, leftoverN3, temp)
+rm(C1, C2, C3, C4, leftoverN1, leftoverN2, leftoverN3, temp2)
 
 
 
@@ -164,13 +166,13 @@ CalcProb <- function(txt) {
       library(tm)
       # clean the text with the same procedure as the training corpus
       # and return the vector with the ngram
-#      source <- VectorSource(txt)
-#      PC2 <- VCorpus(source,
-#                     readerControl = list(reader = readPlain,
-#                                          language = "en", load = TRUE))
-#      PC2 <- cleanCorpus(PC2)
-#      ntxt<- unlist(strsplit(PC2[[1]][[1]][1]," "))
-      ntxt<- unlist(strsplit(txt," "))
+      source <- VectorSource(txt)
+      PC2 <- VCorpus(source,
+                     readerControl = list(reader = readPlain,
+                                          language = "en", load = TRUE))
+      PC2 <- cleanCorpus(PC2)
+      ntxt<- unlist(strsplit(PC2[[1]][[1]][1]," +"))
+#      ntxt<- unlist(strsplit(txt," "))
       n<- length(ntxt)
       ntxt<- ntxt[(n-3):n]
 
@@ -185,7 +187,7 @@ CalcProb <- function(txt) {
             if(!is.na(pos[1])) {          # exists w-3,w ngram
                   Cnum<- CC$cGT[pos[1]]   # discounted freq of w-3,w ngram
                   Cden<- CC$freq[pos[5]]  # freq of w-3,w-1 ngram
-                  return(Prob=Cnum/Cden)}
+                  return(data.frame(Prob=Cnum/Cden, ngram=ngram[1], type="11",stringsAsFactors = FALSE))}
             
             #calc prob 3
             if(!is.na(pos[2])) {          # exists w-2,w ngram
@@ -196,10 +198,10 @@ CalcProb <- function(txt) {
                   group2gram <- CC[CC$nm1gram==ngram[6],] # ngrams which contain the first terms
                   group3gram <- CC[CC$nm1gram==ngram[5],] # ngrams which contain the first terms
                   # ngrams with contain the last terms and didn't exist in the above order
-                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
-                                          gsub(".* ","",group3gram$ngramtxt),]
+                  group<-group2gram[!(gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt)),]
                   alpha <-beta/sum((group$cGT)/Cden)
-                  return(Prob=alpha*Cnum/Cden)}
+                  return(data.frame(Prob=alpha*Cnum/Cden, ngram=ngram[1], type="12",stringsAsFactors = FALSE))}
             
             #calc prob 2
             if(!is.na(pos[3])) {          # exists w-1,w ngram
@@ -210,11 +212,11 @@ CalcProb <- function(txt) {
                   group2gram <- CC[CC$nm1gram==ngram[7],] # ngrams which contain the first terms
                   group3gram <- CC[CC$nm1gram==ngram[5],] # ngrams which contain the first terms
                   # ngrams with contain the last terms and didn't exist in the above order
-                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
-                                          gsub(".* ","",group3gram$ngramtxt),]
+                  group<-group2gram[!(gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt)),]
                   alpha <-beta/sum((group$cGT)/Cden)
-                  return(Prob=alpha*Cnum/Cden)}
-      
+                  return(data.frame(Prob=alpha*Cnum/Cden, ngram=ngram[1], type="13",stringsAsFactors = FALSE))}
+            
             #calc prob 1
             if(!is.na(pos[4])) {          # exists w ngram
                   Cnum<- CC$cGT[pos[4]]   # discounted freq of w ngram
@@ -224,31 +226,31 @@ CalcProb <- function(txt) {
                   group2gram <- CC[CC$type==1,] # ngrams which contain the first terms
                   group3gram <- CC[CC$nm1gram==ngram[5],] # ngrams which contain the first terms
                   # ngrams with contain the last terms and didn't exist in the above order
-                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
-                                          gsub(".* ","",group3gram$ngramtxt),]
+                  group<-group2gram[!(gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt)),]
                   alpha <-beta/sum((group$cGT)/Cden)
-                  return(Prob=alpha*Cnum/Cden)}
+                  return(data.frame(Prob=alpha*Cnum/Cden, ngram=ngram[1], type="14",stringsAsFactors = FALSE))}
       }
       if(!is.na(pos[6])) {          # w-2,w-1 ngram found, we can continue
             #calc prob 4
-            if(!is.na(pos[2])) {          # exists w-3,w ngram
-                  Cnum<- CC$cGT[pos[2]]   # discounted freq of w-3,w ngram
-                  Cden<- CC$freq[pos[6]]  # freq of w-3,w-1 ngram
-                  return(Prob=Cnum/Cden)}
+            if(!is.na(pos[2])) {          # exists w-2,w ngram
+                  Cnum<- CC$cGT[pos[2]]   # discounted freq of w-2,w ngram
+                  Cden<- CC$freq[pos[6]]  # freq of w-2,w-1 ngram
+                  return(data.frame(Prob=Cnum/Cden, ngram=ngram[1], type="21",stringsAsFactors = FALSE))}
             
             #calc prob 3
-            if(!is.na(pos[3])) {          # exists w-2,w ngram
-                  Cnum<- CC$cGT[pos[3]]   # discounted freq of w-2,w ngram
-                  Cden<- CC$freq[pos[7]]  # freq of w-2,w-1 ngram
-                  beta <- CC$leftover[pos[3]]  #leftover of w-2,w ngram
+            if(!is.na(pos[3])) {          # exists w-1,w ngram
+                  Cnum<- CC$cGT[pos[3]]   # discounted freq of w-1,w ngram
+                  Cden<- CC$freq[pos[7]]  # freq of w-1 ngram
+                  beta <- CC$leftover[pos[3]]  #leftover of w-1,w ngram
                   #calculate alpha
                   group2gram <- CC[CC$nm1gram==ngram[7],] # ngrams which contain the first terms
                   group3gram <- CC[CC$nm1gram==ngram[6],] # ngrams which contain the first terms
                   # ngrams with contain the last terms and didn't exist in the above order
-                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
-                                          gsub(".* ","",group3gram$ngramtxt),]
+                  group<-group2gram[!(gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt)),]
                   alpha <-beta/sum((group$cGT)/Cden)
-                  return(Prob=alpha*Cnum/Cden)}
+                  return(data.frame(Prob=alpha*Cnum/Cden, ngram=ngram[1], type="22",stringsAsFactors = FALSE))}
             
             #calc prob 1
             if(!is.na(pos[4])) {          # exists w ngram
@@ -259,18 +261,18 @@ CalcProb <- function(txt) {
                   group2gram <- CC[CC$type==1,] # ngrams which contain the first terms
                   group3gram <- CC[CC$nm1gram==ngram[6],] # ngrams which contain the first terms
                   # ngrams with contain the last terms and didn't exist in the above order
-                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
-                                          gsub(".* ","",group3gram$ngramtxt),]
+                  group<-group2gram[!(gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt)),]
                   alpha <-beta/sum((group$cGT)/Cden)
-                  return(Prob=alpha*Cnum/Cden)}
+                  return(data.frame(Prob=alpha*Cnum/Cden, ngram=ngram[1], type="23",stringsAsFactors = FALSE))}
       }
       
       if(!is.na(pos[7])) {          # w-1,w-1 ngram found, we can continue
             #calc prob 4
-            if(!is.na(pos[3])) {          # exists w-3,w ngram
-                  Cnum<- CC$cGT[pos[3]]   # discounted freq of w-3,w ngram
-                  Cden<- CC$freq[pos[7]]  # freq of w-3,w-1 ngram
-                  return(Prob=Cnum/Cden)}
+            if(!is.na(pos[3])) {          # exists w-1,w ngram
+                  Cnum<- CC$cGT[pos[3]]   # discounted freq of w-1,w ngram
+                  Cden<- CC$freq[pos[7]]  # freq of w-1 ngram
+                  return(data.frame(Prob=Cnum/Cden, ngram=ngram[1], type="31",stringsAsFactors = FALSE))}
             
             #calc prob 1
             if(!is.na(pos[4])) {          # exists w ngram
@@ -281,17 +283,17 @@ CalcProb <- function(txt) {
                   group2gram <- CC[CC$type==1,] # ngrams which contain the first terms
                   group3gram <- CC[CC$nm1gram==ngram[7],] # ngrams which contain the first terms
                   # ngrams with contain the last terms and didn't exist in the above order
-                  group<-group2gram[gsub(".* ","",group2gram$ngramtxt) %in% 
-                                          gsub(".* ","",group3gram$ngramtxt),]
+                  group<-group2gram[!(gsub(".* ","",group2gram$ngramtxt) %in% 
+                                          gsub(".* ","",group3gram$ngramtxt)),]
                   alpha <-beta/sum((group$cGT)/Cden)
-                  return(Prob=alpha*Cnum/Cden)}
+                  return(data.frame(Prob=alpha*Cnum/Cden, ngram=ngram[1], type="32",stringsAsFactors = FALSE))}
       }
       if(is.na(pos[7])) {          # w-1,w-1 ngram found, we can continue
             #calc prob 4
             if(!is.na(pos[4])) {          # exists w-3,w ngram
                   Cnum<- CC$cGT[pos[4]]   # discounted freq of w-3,w ngram
                   Cden<- sum(CC$freq[CC$type==1])  # freq of w-3,w-1 ngram
-                  return(Prob=Cnum/Cden)}
+                  return(data.frame(Prob=Cnum/Cden, ngram=ngram[1], type="41",stringsAsFactors = FALSE))}
       }
       return(0)
 }
