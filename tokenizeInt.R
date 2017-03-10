@@ -2,7 +2,86 @@ library(tm)
 library(tau)
 library(data.table)
 
-createNgramIntIndex <- function(corpus=PC, n=2L) {
+# different tokenizers
+# tokenizers:     unlist(tokenize_ngrams(PC[[1]][[1]][1:4], n=2L, n_min=2, simplify=TRUE))
+# tau:      
+# RWeka:          BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+# quanteda:       toks <- tokens(c(text1 = "the quick brown fox jumped over the lazy dog"))
+#                 tokens_ngrams(toks, n = 4, concatenator = " ")
+# ngram:          ngram_asweka(text1 , min =2 , max =2)
+
+#alternative to createNgram
+createNgramIntIndexALT <- function(corpus=PCclean, n=2L) {
+      BigramTokenizer <- function(x) RWeka::NGramTokenizer(x, RWeka::Weka_control(min = n, max = n))
+      tdm <- TermDocumentMatrix(corpus, control = list(tokenize = BigramTokenizer,
+                                                        wordLengths=c(1,Inf)))
+      if (n==1L) vocab <<-tdm$dimnames$Terms # create vocab character vector
+      ColNames <- paste("X",1:n, sep="")
+
+      tdm <- data.table(token=tdm$dimnames$Terms, freq=as.integer(slam::row_sums(tdm, na.rm = T)))
+      tdm <- tdm[!grepl("\\beosent\\b", token)  # remove rows with "eosent" token
+                 ][, (ColNames) := tstrsplit(token, " ", fixed=TRUE) # create columns with slipt tokens
+                   ][, token:=NULL       # delete original column
+                     ][, c(ColNames) :=lapply(.SD, function(x) match(x,vocab)), .SDcols=ColNames]
+      # # and last line to convert columns with single tokens to their corresponding index in vocab
+      setkeyv(tdm, ColNames)
+      tdm
+}
+
+CreateNnALT<- function() {
+      C1 <- createNgramIntIndexALT(PC,n=1L) #also creates "vocab" variable
+      C2 <- createNgramIntIndexALT(PC,n=2L)
+      C3 <- createNgramIntIndexALT(PC,n=3L)
+      C4 <- createNgramIntIndexALT(PC,n=4L)
+
+      N1<-C1[,.N, by="freq"][order(freq)]
+      N2<-C2[,.N, by="freq"][order(freq)]
+      N3<-C3[,.N, by="freq"][order(freq)]
+      N4<-C4[,.N, by="freq"][order(freq)]
+
+      k=5
+      cGT<-data.table(f=0:k
+                      ,N1=c_ast(N=N1,k=k,nWords=sum(N1$N),ngramtype=1)
+                      ,N2=c_ast(N=N2,k=k,nWords=sum(N1$N),ngramtype=2)
+                      ,N3=c_ast(N=N3,k=k,nWords=sum(N1$N),ngramtype=3)
+                      ,N4=c_ast(N=N4,k=k,nWords=sum(N1$N),ngramtype=4))
+      save(N1, N2, N3, N4, file="All_FreqOfFreq_N_tables.Rdata")
+      rm(N1, N2, N3, N4)
+
+      C4<-merge(C4, cGT[,.(f,cGT=N4)], by.x = "freq", by.y="f", all.x = TRUE) # add cGT column
+      C4[is.na(cGT), cGT:=as.numeric(freq)]                                      # add cGT column
+      setkey(C4, X1, X2, X3, X4)
+      leftoverN3<-C4[ ,.(leftover=1-sum(cGT)/sum(freq)), by=list (X1, X2, X3)]
+      setkey(leftoverN3, X1, X2, X3)
+      # C4<-C4[C4$freq>1,]
+
+      C3<-merge(C3, cGT[,.(f,cGT=N3)], by.x = "freq", by.y="f", all.x = TRUE) # add cGT column
+      C3[is.na(cGT), cGT:=as.numeric(freq)]                                      # add cGT column
+      setkey(C3, X1, X2, X3)
+      leftoverN2<-C3[ ,.(leftover=1-sum(cGT)/sum(freq)), by=list (X1, X2)]
+      setkey(leftoverN2, X1, X2)
+      # C3<-C3[C3$freq>1,]
+      C3<-merge(C3, leftoverN3, all.x = TRUE)
+      
+      C2<-merge(C2, cGT[,.(f,cGT=N2)], by.x = "freq", by.y="f", all.x = TRUE) # add cGT column
+      C2[is.na(cGT), cGT:=as.numeric(freq)]                                      # add cGT column
+      setkey(C2, X1, X2)
+      leftoverN1<-C2[ ,.(leftover=1-sum(cGT)/sum(freq)), by=list (X1)]
+      setkey(leftoverN1, X1)
+      # C2<-C2[C2$freq>1,]
+      C2<-merge(C2, leftoverN2, all.x = TRUE)
+      
+      C1<-merge(C1, cGT[,.(f,cGT=N1)], by.x = "freq", by.y="f", all.x = TRUE) # add cGT column
+      C1[is.na(cGT), cGT:=as.numeric(freq)]                                      # add cGT column
+      setkey(C1, X1)
+      # C1$type=1L
+      C1<-merge(C1, leftoverN1, all.x = TRUE)
+      
+      rm(leftoverN1, leftoverN2, leftoverN3, temp2, N1, N2, N3, N4)
+      
+}
+
+createNgramIntIndex <- function(corpus=PC, n=2L) { #obsolete
       #      corpus <- PC   (for testing)
       ndocs=length(corpus)  # processes all documents in the corpora
       N<-list()
@@ -52,16 +131,16 @@ createNgramIntIndex <- function(corpus=PC, n=2L) {
 #      N[[1]] #only working for if ndocs==1, otherwise must be calculated for merge of "temp2", outside this function
 }
 
-CreateNn<- function() {
-      N1<- createNgramIntIndex(PCclean, n=1L, min=1)
+CreateNn<- function() {       #obsolete
+      N1<- createNgramIntIndex(PCclean, n=1L)
             load("In1_1.Rdata")
             vocab<-temp2$ngramtxt
             temp2[,X1:=1:.N]
             save(temp2, file="In1_1.Rdata")
             rm(temp2)
-      N2<- createNgramIntIndex(PCclean, n=2L, min=1)
-      N3<- createNgramIntIndex(PCclean, n=3L, min=1)
-      N4<- createNgramIntIndex(PCclean, n=4L, min=1)
+      N2<- createNgramIntIndex(PCclean, n=2L)
+      N3<- createNgramIntIndex(PCclean, n=3L)
+      N4<- createNgramIntIndex(PCclean, n=4L)
 }
 
 c_ast <- function(N=N1, k=5, nWords=0,ngramtype=1) {
@@ -77,7 +156,7 @@ c_ast <- function(N=N1, k=5, nWords=0,ngramtype=1) {
       names(c_ast) <- 0:k
       c_ast
 }
-IndexLevels <- function(txtv, v=vocab) {  # txtv = text vector
+IndexLevels <- function(txtv, v=vocab) {  # txtv = text vector  #### OBSOLETE
       #needs a character vector (vocab) with all the words in the document
       #returns a data frame, with the same number of columns as the ngram type
       #but with the words replaced by the word location in vocab
@@ -90,7 +169,7 @@ IndexLevels <- function(txtv, v=vocab) {  # txtv = text vector
       foo
 }
 
-createCC<- function() {
+createCC<- function() { #### OBSOLETE
       load("In1_1.Rdata")
       N1<-temp2[,.N, by="freq"][order(freq)]
       load("In2_1.Rdata")
@@ -114,37 +193,37 @@ createCC<- function() {
       C4<-merge(temp2, cGT[,.(f,cGT=N4)], by.x = "freq", by.y="f", all.x = TRUE) # add cGT column
       C4[is.na(cGT), cGT:=as.numeric(freq)]                                      # add cGT column
       setkey(C4, X1, X2, X3, X4)
-      C4$type=4L  # add type column (optional)
+      # C4$type=4L  # add type column (optional)
       leftoverN3<-C4[ ,.(leftover=1-sum(cGT)/sum(freq)), by=list (X1, X2, X3)]
       setkey(leftoverN3, X1, X2, X3)
-      C4<-C4[C4$freq>1,]
-      C4$leftover<-NA # add type column (optional)
+      # C4<-C4[C4$freq>1,]
+      # C4$leftover<-NA # add type column (optional)
       
       load("In3_1.Rdata")
       C3<-merge(temp2, cGT[,.(f,cGT=N3)], by.x = "freq", by.y="f", all.x = TRUE) # add cGT column
       C3[is.na(cGT), cGT:=as.numeric(freq)]                                      # add cGT column
       setkey(C3, X1, X2, X3)
-      C3$type=3L
+      # C3$type=3L
       leftoverN2<-C3[ ,.(leftover=1-sum(cGT)/sum(freq)), by=list (X1, X2)]
       setkey(leftoverN2, X1, X2)
-      C3<-C3[C3$freq>1,]
+      # C3<-C3[C3$freq>1,]
       C3<-merge(C3, leftoverN3, all.x = TRUE)
 
       load("In2_1.Rdata")
       C2<-merge(temp2, cGT[,.(f,cGT=N2)], by.x = "freq", by.y="f", all.x = TRUE) # add cGT column
       C2[is.na(cGT), cGT:=as.numeric(freq)]                                      # add cGT column
       setkey(C2, X1, X2)
-      C2$type=2L
+      # C2$type=2L
       leftoverN1<-C2[ ,.(leftover=1-sum(cGT)/sum(freq)), by=list (X1)]
       setkey(leftoverN1, X1)
-      C2<-C2[C2$freq>1,]
+      # C2<-C2[C2$freq>1,]
       C2<-merge(C2, leftoverN2, all.x = TRUE)
       
       load("In1_1.Rdata")
       C1<-merge(temp2, cGT[,.(f,cGT=N1)], by.x = "freq", by.y="f", all.x = TRUE) # add cGT column
       C1[is.na(cGT), cGT:=as.numeric(freq)]                                      # add cGT column
       setkey(C1, X1)
-      C1$type=1L
+      # C1$type=1L
       C1<-merge(C1, leftoverN1, all.x = TRUE)
       
       rm(leftoverN1, leftoverN2, leftoverN3, temp2, N1, N2, N3, N4)
@@ -161,6 +240,59 @@ ReverseIndexLevels <- function(df, v=vocab) {
       foo
 }
 
+CalcProbTerms <- function(txt) {
+      # returns the most probable words (and their probability) to appear after txt variable
+
+      library(tm)
+      # clean the text with the same procedure as the training corpus
+      # and return the vector with the ngram
+      source <- VectorSource(txt)
+      PC2 <- VCorpus(source,
+                     readerControl = list(reader = readPlain,
+                                          language = "en", load = TRUE))
+      PC2 <- cleanCorpus(PC2)
+      ntxt<- unlist(strsplit(PC2[[1]][[1]][1]," +"))
+      #      ntxt<- unlist(strsplit(txt," "))
+      n <- length(ntxt)
+      ntxt<- tail(ntxt,3) # assumes n>3
+      index<-IndexLevels(ntxt)
+      index<-index[[1]]
+
+      
+      # Check if this ngram exists in C4:
+      subset <- C4[.(index[1], index[2], index[3])]
+      if(!is.na(sum(subset$freq))) {  #if subset exists, calculates the probabilities
+            # first, of existing 
+            z<-subset[,Prob:=cGT/sum(freq)][,.(X4, Prob)][order(-Prob)]
+            return(head(z,10))
+            
+            # second, of 
+            
+      }
+
+      subset <- C3[.(index[2], index[3])]
+      if(!is.na(sum(subset$freq))) {  #if subset exists, calculates the probabilities
+            # first, of existing 
+            z<-subset[,Prob:=cGT/sum(freq)][,.(X3, Prob)][order(-Prob)]
+            return(head(z,10))
+      }
+
+      subset <- C2[.(index[3])]
+      if(!is.na(sum(subset$freq))) {  #if subset exists, calculates the probabilities
+            # first, of existing 
+            z<-subset[,Prob:=cGT/sum(freq)][,.(X2, Prob)][order(-Prob)]
+            return(head(z,10))
+      }
+
+      subset <- C1
+      if(!is.na(sum(subset$freq))) {  #if subset exists, calculates the probabilities
+            # first, of existing 
+            z<-subset[,Prob:=cGT/sum(freq)][,.(X1, Prob)][order(-Prob)]
+            return(head(z,10))
+      }
+      
+}
+      
 
 CalcProb <- function(txt) {
       # returns the probability of the last word in the txt variable

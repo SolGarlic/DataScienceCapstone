@@ -5,14 +5,18 @@
 
 ## Auxiliary data creation. Need PCclean.
 
-library("RWeka")
+# library("RWeka") not loaded, but encapsulated RWeka::ngramtokenizer
 library(tokenizers)
 library("tm")
+library(ngram)
 
-BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+BigramTokenizer <- function(x) RWeka::NGramTokenizer(x, RWeka::Weka_control(min = 4, max = 4))
+#BigramTokenizer <- function(x) ngram_asweka(z , min =4 , max =4)
 tdm <- TermDocumentMatrix(PCclean, control = list(tokenize = BigramTokenizer))
 freq4 <- rowSums(inspect(tdm))
 #freq4 <- termFreq(PC[[1]], control = list(tokenize = BigramTokenizer))
+
+
 
 BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
 tdm <- TermDocumentMatrix(PCclean, control = list(tokenize = BigramTokenizer))

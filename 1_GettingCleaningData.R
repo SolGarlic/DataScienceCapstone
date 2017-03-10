@@ -43,14 +43,17 @@ sampFILE <- function(x="./final/en_US/en_US.news.txt", samplesize=0.1) {
       # compute number to skip on each read; account for the record just read 
       skip <- diff(c(0, recs)) - 1 
       # allocate my data 
-      mysel <- sapply(1:sel, function(i) scan(input, what="character", 
-                                              skip=skip[i],nlines=1, 
-                                              sep="\n", quiet=TRUE))
+      sel <- as.integer(seq(1,sel, length.out = 11)) # 10 intervals
+      for (j in 1:10) {
+            mysel <- sapply(sel[j]:sel[j+1], function(i) scan(input, what="character", 
+                                                    skip=skip[i],nlines=1, 
+                                                    sep="\n", quiet=TRUE))
+            filename <- gsub(".txt",paste(j,".txt",sep=""),x,fixed=TRUE)
+            filename <- gsub("en_US","en_US_TEST",filename,fixed=TRUE)
+            write(unlist(mysel),file=filename)
+      }
       close(input, "r")
       closeAllConnections()
-      filename <- gsub(".txt","_S.txt",x,fixed=TRUE)
-      filename <- gsub("en_US","en_US_TEST",filename,fixed=TRUE)
-      write(unlist(mysel),file=filename)
       #      mysel
 }
 
@@ -94,28 +97,35 @@ StemCompleteDic <- function() {
       # Creates a sorted text vector with the unstemmd version of the stemmed words
       # StemDictionary is a word list ordered by frequency
       # use: tm::stemCompletion(x, StemDictionary, type="first") to complete words
-      skipPunctuation <- function(x) removePunctuation(x)
-      transliterate <- content_transformer(function(x) {
-            iconv(x, from="latin1", to="ASCII//TRANSLIT")
-      })
-      profanity <- readLines("full-list-of-bad-words-banned-by-google-csv-file_2013_11_26_04_52_30_695.csv")
-      skipWords <- function(x) removeWords(x, c(
-            stopwords("en"),
-            profanity))
-      funs <- list(removeNumbers,
-                   skipWords,
-                   transliterate,
-                   skipPunctuation,
-                   stripWhitespace,
-                   content_transformer(tolower)
-      )
-      PCclean2 <- tm_map(PC, FUN = tm_reduce, tmFuns = funs)
-      freq<-termFreq(PCclean2[[1]])
-      freq1stem <- stemDocument(names(freq))
-      freq1stem <- freq[names(freq)!=freq1stem]
-      freq <- sort(freq1stem, decreasing = TRUE)
-      StemDictionary <- names(freq)
-      # StemDictionary <- StemDictionary[freq>1] # optional if too big
+      # receives an almost clean Corpus (just before stemming)
+      
+      
+      # skipPunctuation <- function(x) removePunctuation(x)
+      # transliterate <- content_transformer(function(x) {
+      #       iconv(x, from="latin1", to="ASCII//TRANSLIT")
+      # })
+      # profanity <- readLines("full-list-of-bad-words-banned-by-google-csv-file_2013_11_26_04_52_30_695.csv")
+      # skipWords <- function(x) removeWords(x, c(
+      #       stopwords("en"),
+      #       profanity))
+      # funs <- list(removeNumbers,
+      #              skipWords,
+      #              transliterate,
+      #              skipPunctuation,
+      #              stripWhitespace,
+      #              content_transformer(tolower)
+      # )
+      # PCclean2 <- tm_map(PC, FUN = tm_reduce, tmFuns = funs)
+
+      BigramTokenizer <- function(x) RWeka::NGramTokenizer(x, RWeka::Weka_control(min = 1, max = 1))
+      tdm <- TermDocumentMatrix(PC, control = list(tokenize = BigramTokenizer,
+                                                        wordLengths=c(1,Inf)))
+
+      stem<-data.table(token=tdm$dimnames$Terms, freq=as.integer(slam::row_sums(tdm, na.rm = T)), key="freq")
+      
+      StemDictionary<- stem[,changed:=token!=stemDocument(token)
+                            ][changed==TRUE][order(-freq)
+                                             ][, c("changed", "freq"):=NULL]
       save (StemDictionary, file="StemDictionary.Rdata")
       return(StemDictionary)
 }
@@ -134,9 +144,11 @@ gsubCorpus <- function (corpus, pattern, replacement, fixed=FALSE) {
 }
 
 cleanCorpus <- function(PCclean) {
+      # takes a gross Corpus and returns a clean one
+      # use with             PCclean <- cleanCorpus(PC)
       library(tm)
       # replace most punctuation by " "
-      PCclean <- gsubCorpus(PCclean, "[][|~<>_,¢^\\}\\\\{()ºª£€§@<=>#$%*+/&·`´¨-]+", " ")
+      PCclean <- gsubCorpus(PCclean, "[][|~<>_,^\\}\\\\{)(<=>#$%*+/&@-`´¨§ºª¢£€·]+", " ")
       # remove numbers (to also remove additionl ".,")
       PCclean <- gsubCorpus(PCclean, "\\d*(,|.)?\\d+", "")
       # replace strong punctuation by " eosent ", including all 
@@ -151,24 +163,37 @@ cleanCorpus <- function(PCclean) {
       mystopwords <- c("i","you","my","have","he","we","so","from","me","its"
                        ,"all","said","his","your","just")
       skipWords <- function(x) removeWords(x, c(
-            stopwords("en"),
+            tm::stopwords("en"),
 #            mystopwords,
             profanity))
       skipPunctuation <- function(x) removePunctuation(x)
       # remove additional punctuation and foreign characters
       funs <- list(skipPunctuation,
-                   transliterate             )
+                   transliterate)
       PCclean <- tm_map(PCclean, FUN = tm_reduce, tmFuns = funs)
       
       # remove additional numbers, stopwords, whitespace, convert to lower and stem document
       funs <- list(removeNumbers,
                    skipWords,
-                   stemDocument,
+#                   stemDocument,
                    stripWhitespace,
                    content_transformer(tolower))
       PCclean <- tm_map(PCclean, FUN = tm_reduce, tmFuns = funs)
+
+      StemDictionary <<- StemCompleteDic(PCclean)
+
+      funs <- list(stemDocument)
+      PCclean <- tm_map(PCclean, FUN = tm_reduce, tmFuns = funs)
+      
       return(PCclean)
 }
+
+CodeToRun <- function() {
+      sampleDIR(sample=0.02)
+      
+} 
+      
+
 
 
 
