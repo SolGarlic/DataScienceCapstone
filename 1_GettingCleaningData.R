@@ -43,8 +43,9 @@ sampFILE <- function(x="./final/en_US/en_US.news.txt", samplesize=0.1) {
       # compute number to skip on each read; account for the record just read 
       skip <- diff(c(0, recs)) - 1 
       # allocate my data 
-      sel <- as.integer(seq(1,sel, length.out = 11)) # 10 intervals
-      for (j in 1:10) {
+      int<-20 #intervals
+      sel <- as.integer(seq(1,sel, length.out = int+1)) # 10 intervals
+      for (j in 1:int) {
             mysel <- sapply(sel[j]:sel[j+1], function(i) scan(input, what="character", 
                                                     skip=skip[i],nlines=1, 
                                                     sep="\n", quiet=TRUE))
@@ -77,23 +78,23 @@ createPC <- function(Virtual=TRUE) {
                           encoding = "UTF-8")
       
       if (Virtual) {
-      PC <- VCorpus(source,
+      PC <<- VCorpus(source,
                     readerControl = list(reader = readPlain,
                                          language = "en", load = TRUE))
       }
       
       if (!Virtual) {
-      PC <- PCorpus(source,
+      PC <<- PCorpus(source,
                     readerControl = list(reader = readPlain,
                                          language = "en", load = TRUE),
                     dbControl = list(useDb = TRUE,
                                      dbName = "en_US.db",
                                      dbType = "DB1"))
       }
-      return(PC)
+#      return(PC)
 }
            
-StemCompleteDic <- function() {
+StemCompleteDic <- function(PC) {
       # Creates a sorted text vector with the unstemmd version of the stemmed words
       # StemDictionary is a word list ordered by frequency
       # use: tm::stemCompletion(x, StemDictionary, type="first") to complete words
@@ -130,9 +131,8 @@ StemCompleteDic <- function() {
       return(StemDictionary)
 }
       
-############################
-#  Clean PC ALTERNATIVE    #
-############################
+      
+      #  Clean PC ALTERNATIVE    #
 
 
 gsubCorpus <- function (corpus, pattern, replacement, fixed=FALSE) {
@@ -143,12 +143,12 @@ gsubCorpus <- function (corpus, pattern, replacement, fixed=FALSE) {
              fixed=fixed)
 }
 
-cleanCorpus <- function(PCclean) {
+cleanCorpus <- function(PCclean, StemDic=FALSE) {
       # takes a gross Corpus and returns a clean one
       # use with             PCclean <- cleanCorpus(PC)
       library(tm)
-      # replace most punctuation by " "
-      PCclean <- gsubCorpus(PCclean, "[][|~<>_,^\\}\\\\{)(<=>#$%*+/&@-`´¨§ºª¢£€·]+", " ")
+      # replace most punctuation by " "   NOTA!!! these are temporarily removed from the pattern below: ´`¨§ºª¢£€·
+      PCclean <- gsubCorpus(PCclean, "[][|~<>_,^\\}\\\\{)(<=>#$%*+/&@-]+", " ")  
       # remove numbers (to also remove additionl ".,")
       PCclean <- gsubCorpus(PCclean, "\\d*(,|.)?\\d+", "")
       # replace strong punctuation by " eosent ", including all 
@@ -180,7 +180,7 @@ cleanCorpus <- function(PCclean) {
                    content_transformer(tolower))
       PCclean <- tm_map(PCclean, FUN = tm_reduce, tmFuns = funs)
 
-      StemDictionary <<- StemCompleteDic(PCclean)
+      if(StemDic) StemDictionary <<- StemCompleteDic(PCclean)
 
       funs <- list(stemDocument)
       PCclean <- tm_map(PCclean, FUN = tm_reduce, tmFuns = funs)
@@ -188,35 +188,16 @@ cleanCorpus <- function(PCclean) {
       return(PCclean)
 }
 
+
 CodeToRun <- function() {
-      sampleDIR(sample=0.02)
+      sampleDIR(sample=0.6)
+      createPC(Virtual = FALSE)
+      # PCclean <- cleanCorpus(PC, StemDic=TRUE)
+      cleanCorpus(PC, StemDic=TRUE)
       
-} 
       
-
-
-
-
-# chr_tokenizer <- function(x) unlist(strsplit(as.character(x), split=""))
-# library("RWeka")
-# BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
-# ctrl <- list(tokenize = NGramTokenizer,
-#              wordLengths = c(1, Inf))
-# ctrl <- list(tokenize = chr_tokenizer,
-#              wordLengths = c(1, Inf))
-# freq1<-termFreq(PCclean[[1]], ctrl)
-# freq1 <- freq1[!grepl(" ?\\beof\\b ?", names(freq1))]
-# head(freq1,20)
-# cha<-sort(names(freq1))
-# head(cha,20)
-
-
-# x<-"André 1@£€] ¨ Abigail Reynolds   !#!$!#$#$%%&#<>$%^/}][6€§£ººº 33.44 3,1 João,.-()\\/(!(#$/)!(#*ªÇ)!(),.:;?|"
-# x4<-gsub("[!(),.:;?]+", "<EOF>",x2)
-# x2<-gsub(pattern="[][\\}{()ºª£€§@<=>#$%*+-/&']+", replacement=" ",x)
-# gsub(pattern="[][|<>^\\}{()ºª£€§@<=>#$%*+/&'-]+", replacement=" ",x)
-# x2<-gsub("\\d*(,|.)?\\d+", "",x3)
-# gsub("[[:punct:-[<>]]]", "",x2)
-# gsub("( <EOF> *)+", " <EOF> ",x3)
-
-
+      
+      
+      
+      
+}
