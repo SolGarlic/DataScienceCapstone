@@ -343,7 +343,7 @@ CalcProbTermsALT <- function(txt) {
             
             words<- rbind(words4, words3, words2, words1)
             words<-words[,.(X=vocab[X],prob)][order(-prob)]
-            words<-stemCompletion(words, StemDictionary$token, type="first")
+            words$X<-stemCompletion(words$X, StemDictionary$token, type="first")
             return(words)
       }
       
@@ -365,7 +365,7 @@ CalcProbTermsALT <- function(txt) {
             
             words<- rbind(words3, words2, words1)
             words<-words[,.(X=vocab[X],prob)][order(-prob)]
-            words<-stemCompletion(words, StemDictionary$token, type="first")
+            words$X<-stemCompletion(words$X, StemDictionary$token, type="first")
             return(words)
       }
 
@@ -382,7 +382,7 @@ CalcProbTermsALT <- function(txt) {
             
             words<- rbind(words2, words1)
             words<-words[,.(X=vocab[X],prob)][order(-prob)]
-            words<-stemCompletion(words, StemDictionary$token, type="first")
+            words$X<-stemCompletion(words$X, StemDictionary$token, type="first")
             return(words)
       }
 
@@ -391,7 +391,7 @@ CalcProbTermsALT <- function(txt) {
             words1<-head(group1[,.(X=X1, prob=cGT/sum(freq))][order(-prob)],10)
             
             words<-words[,.(X=vocab[X],prob)][order(-prob)]
-            words<-stemCompletion(words, StemDictionary$token, type="first")
+            words$X<-stemCompletion(words$X, StemDictionary$token, type="first")
             return(words)
       }
 }
